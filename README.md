@@ -27,3 +27,7 @@ The desktop app can export a selected profile's schedule to CSV and import CSV i
 ## Restore safeguards
 
 Use **Restore Backup...** in the desktop application. Select an existing Supplement Barista SQLite backup, confirm replacement, and choose a **new** recovery-backup filename. The application checks SQLite integrity and schema version before modifying the current database, saves the current database to the recovery file, then restores the selected backup. Existing recovery files cannot be overwritten. Restoring replaces all profiles, supplements, and scheduled doses. Keep recovery backups in a separate safe location.
+
+## Rev 0.2.0: Daily schedule grid
+
+The schedule now displays all 48 half-hour slots from 00:00 to 23:30, including empty slots. Selecting an empty slot preselects its time for a new dose; selecting an existing dose loads its details for editing. Multiple supplements can occupy the same time slot. Existing SQLite data remains unchanged.
