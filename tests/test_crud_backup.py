@@ -61,6 +61,7 @@ def test_backup_can_replace_existing_file_when_explicit(tmp_path):
     store.backup(destination)
     store.add_profile("After")
     store.backup(destination, overwrite=True)
+    assert not list(tmp_path.glob(".supplement-barista-*.sqlite3"))
     with sqlite3.connect(destination) as db:
         names = [row[0] for row in db.execute("SELECT name FROM profiles ORDER BY name")]
         assert names == ["After", "Before"]
