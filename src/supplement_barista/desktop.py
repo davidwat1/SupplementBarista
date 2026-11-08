@@ -7,6 +7,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from supplement_barista import __version__
 from supplement_barista.core import SupplementStore
 from supplement_barista.csv_io import export_schedule, import_schedule
 
@@ -21,7 +22,7 @@ class SupplementBaristaApp:
     def __init__(self, root: tk.Tk, store: SupplementStore) -> None:
         self.root = root
         self.store = store
-        self.root.title("Supplement Barista v2")
+        self.root.title(f"Supplement Barista v2 — Rev {__version__}")
         self.root.geometry("1050x650")
         self.profile_ids: dict[str, int] = {}
         self.supplement_ids: dict[str, int] = {}
