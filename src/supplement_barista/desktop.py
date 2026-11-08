@@ -10,6 +10,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from supplement_barista import __version__
 from supplement_barista.core import SupplementStore
 from supplement_barista.csv_io import export_schedule, import_schedule
+from supplement_barista.library import search_supplements
 
 
 def default_database_path() -> Path:
@@ -58,7 +59,8 @@ class SupplementBaristaApp:
             catalog, textvariable=self.supplement_var, state="readonly", width=35
         )
         self.supplement_box.pack(side="left", padx=8)
-        ttk.Button(catalog, text="Add", command=self.new_supplement).pack(side="left")
+        ttk.Button(catalog, text="Browse library...", command=self.browse_library).pack(side="left")
+        ttk.Button(catalog, text="Add custom...", command=self.new_supplement).pack(side="left")
         ttk.Button(catalog, text="Edit", command=self.edit_supplement).pack(side="left")
         ttk.Button(catalog, text="Delete", command=self.delete_supplement).pack(side="left")
 
@@ -238,6 +240,75 @@ class SupplementBaristaApp:
         self.supplement_var.set(name.strip())
         self.refresh_schedule()
         self._saved()
+
+    def browse_library(self) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("Supplement library — select or add custom")
+        window.geometry("520x490")
+        window.transient(self.root)
+        window.grab_set()
+        panel = ttk.Frame(window, padding=12)
+        panel.pack(fill="both", expand=True)
+        ttk.Label(
+            panel,
+            text="Choose a supplement to add to your catalog. No doses are scheduled.",
+        ).pack(anchor="w")
+        search = tk.StringVar()
+        ttk.Label(panel, text="Search library").pack(anchor="w", pady=(12, 0))
+        entry = ttk.Entry(panel, textvariable=search)
+        entry.pack(fill="x")
+        listbox = tk.Listbox(panel, height=17, exportselection=False)
+        listbox.pack(fill="both", expand=True, pady=10)
+        entries: list[tuple[str, str]] = []
+
+        def refresh(*_args) -> None:
+            entries[:] = search_supplements(search.get())
+            listbox.delete(0, "end")
+            for name, form in entries:
+                listbox.insert("end", f"{name}  ({form})")
+
+        def add_selected() -> None:
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showinfo(
+                    "Choose a supplement", "Select an item from the list.", parent=window
+                )
+                return
+            name, form = entries[selection[0]]
+            existing = next(
+                (item for item in self.store.supplements()
+                 if item["name"].casefold() == name.casefold()),
+                None,
+            )
+            if existing:
+                self.refresh_catalog()
+                self.supplement_var.set(existing["name"])
+                messagebox.showinfo(
+                    "Already in catalog", "Selected the existing catalog entry.",
+                    parent=window,
+                )
+            else:
+                try:
+                    self.store.add_supplement(name, form)
+                except (ValueError, sqlite3.Error) as exc:
+                    messagebox.showerror("Supplement Barista", str(exc), parent=window)
+                    return
+                self.refresh_catalog()
+                self.supplement_var.set(name)
+                self._saved()
+            window.destroy()
+
+        search.trace_add("write", refresh)
+        refresh()
+        listbox.bind("<Double-Button-1>", lambda _event: add_selected())
+        buttons = ttk.Frame(panel)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Add selected", command=add_selected).pack(side="left")
+        ttk.Button(
+            buttons, text="Add custom...", command=lambda: (window.destroy(), self.new_supplement())
+        ).pack(side="left", padx=8)
+        ttk.Button(buttons, text="Cancel", command=window.destroy).pack(side="right")
+        entry.focus_set()
 
     def new_supplement(self) -> None:
         self._execute(lambda: self._supplement_dialog("Add supplement"))
