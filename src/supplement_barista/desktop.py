@@ -96,6 +96,7 @@ class SupplementBaristaApp:
         actions.pack(fill="x")
         ttk.Button(actions, text="Import schedule CSV", command=self.import_csv).pack(side="left")
         ttk.Button(actions, text="Export schedule CSV", command=self.export_csv).pack(side="left")
+        ttk.Button(actions, text="Restore Backup...", command=self.restore).pack(side="right")
         ttk.Button(actions, text="Save Backup...", command=self.backup).pack(side="right")
         ttk.Label(frame, textvariable=self.save_status).pack(anchor="w", pady=(6, 0))
 
@@ -325,6 +326,39 @@ class SupplementBaristaApp:
 
     def _saved(self) -> None:
         self.save_status.set("All changes saved automatically")
+
+    def restore(self) -> None:
+        def action() -> None:
+            source = filedialog.askopenfilename(
+                parent=self.root, title="Choose Supplement Barista backup",
+                filetypes=[("SQLite database", "*.sqlite3")],
+            )
+            if not source:
+                return
+            if not messagebox.askyesno(
+                "Confirm restore",
+                "Restore will replace ALL current profiles, supplements, and doses. "
+                "You must first save a recovery copy of your current database. Continue?",
+                parent=self.root,
+            ):
+                return
+            recovery = filedialog.asksaveasfilename(
+                parent=self.root, title="Save current database before restore",
+                defaultextension=".sqlite3",
+                filetypes=[("SQLite database", "*.sqlite3")],
+            )
+            if not recovery:
+                return
+            self.store.restore(source, recovery)
+            self.refresh_catalog()
+            self.refresh_profiles()
+            self._saved()
+            messagebox.showinfo(
+                "Restore complete",
+                "Backup restored. A recovery copy of your previous database was saved.",
+                parent=self.root,
+            )
+        self._execute(action)
 
     def backup(self) -> None:
         path = filedialog.asksaveasfilename(
