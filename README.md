@@ -23,3 +23,7 @@ The database is stored under your home directory in `SupplementBarista/supplemen
 ## CSV schedule exchange
 
 The desktop app can export a selected profile's schedule to CSV and import CSV into a selected profile. Columns are `time,supplement,form,quantity,unit`. Times must use 30-minute increments. Import validates rows before writing and rolls back on database errors. Imports append doses and may create duplicates on repeat import. Export and database backup refuse to overwrite existing files. Restore is not yet available in the UI; preserve the original database before any manual recovery.
+
+## Restore safeguards
+
+Use **Restore Backup...** in the desktop application. Select an existing Supplement Barista SQLite backup, confirm replacement, and choose a **new** recovery-backup filename. The application checks SQLite integrity and schema version before modifying the current database, saves the current database to the recovery file, then restores the selected backup. Existing recovery files cannot be overwritten. Restoring replaces all profiles, supplements, and scheduled doses. Keep recovery backups in a separate safe location.
