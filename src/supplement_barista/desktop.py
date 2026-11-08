@@ -11,6 +11,7 @@ from supplement_barista import __version__
 from supplement_barista.core import SupplementStore
 from supplement_barista.csv_io import export_schedule, import_schedule
 from supplement_barista.library import search_supplements
+from supplement_barista.units import normalize_unit
 
 
 def default_database_path() -> Path:
@@ -298,7 +299,7 @@ class SupplementBaristaApp:
             try:
                 profile_id = self._profile_id()
                 quantity = float(amount_choice.get())
-                unit = unit_choice.get().strip()
+                unit = normalize_unit(unit_choice.get())
                 import math
                 if not math.isfinite(quantity) or quantity <= 0 or not unit:
                     raise ValueError("Enter a positive quantity and a unit")
@@ -374,7 +375,7 @@ class SupplementBaristaApp:
         self._execute(action)
 
     def _dose_values(self) -> tuple[str, float, str]:
-        return self.time_var.get(), float(self.quantity_var.get()), self.unit_var.get()
+        return self.time_var.get(), float(self.quantity_var.get()), normalize_unit(self.unit_var.get())
 
     def add_dose(self) -> None:
         def action() -> None:
