@@ -244,22 +244,24 @@ class SupplementBaristaApp:
     def browse_library(self) -> None:
         window = tk.Toplevel(self.root)
         window.title("Supplement library — select or add custom")
-        window.geometry("560x610")
+        window.geometry("590x650")
         window.transient(self.root)
         window.grab_set()
         panel = ttk.Frame(window, padding=12)
         panel.pack(fill="both", expand=True)
         ttk.Label(
             panel,
-            text="Choose a supplement, enter dosage and time, then add to schedule.",
+            text="Build your daily schedule — add multiple supplements without closing this window.",
         ).pack(anchor="w")
         search = tk.StringVar()
-        ttk.Label(panel, text="Search library").pack(anchor="w", pady=(12, 0))
+        ttk.Label(panel, text="STEP 1 — Find and select a supplement").pack(
+            anchor="w", pady=(12, 0)
+        )
         entry = ttk.Entry(panel, textvariable=search)
         entry.pack(fill="x")
         listbox = tk.Listbox(panel, height=17, exportselection=False)
         listbox.pack(fill="both", expand=True, pady=10)
-        dose_fields = ttk.LabelFrame(panel, text="Schedule dose", padding=8)
+        dose_fields = ttk.LabelFrame(panel, text="STEP 2 — Enter quantity, unit and time", padding=8)
         dose_fields.pack(fill="x", pady=(0, 10))
         ttk.Label(dose_fields, text="Time").grid(row=0, column=0, sticky="w")
         time_choice = tk.StringVar(value=self.time_var.get())
@@ -269,14 +271,14 @@ class SupplementBaristaApp:
         ).grid(row=1, column=0, padx=(0, 12))
         ttk.Label(dose_fields, text="Quantity").grid(row=0, column=1, sticky="w")
         amount_choice = tk.StringVar(value="")
-        ttk.Entry(dose_fields, textvariable=amount_choice, width=12).grid(
-            row=1, column=1, padx=(0, 12)
-        )
+        amount_entry = ttk.Entry(dose_fields, textvariable=amount_choice, width=12)
+        amount_entry.grid(row=1, column=1, padx=(0, 12))
         ttk.Label(dose_fields, text="Unit (mg, g, capsule)").grid(
             row=0, column=2, sticky="w"
         )
         unit_choice = tk.StringVar(value="")
         ttk.Entry(dose_fields, textvariable=unit_choice, width=18).grid(row=1, column=2)
+        status = tk.StringVar(value="Select a supplement, then enter its dose and time.")
         entries: list[tuple[str, str]] = []
 
         def refresh(*_args) -> None:
@@ -325,18 +327,25 @@ class SupplementBaristaApp:
             self.unit_var.set(unit)
             self.refresh_schedule()
             self._saved()
-            window.destroy()
+            status.set(f"Added: {name} — {quantity:g} {unit} at {time}. Add another or close.")
+            amount_choice.set("")
+            unit_choice.set("")
+            listbox.selection_clear(0, "end")
+            entry.focus_set()
 
         search.trace_add("write", refresh)
         refresh()
-        listbox.bind("<Double-Button-1>", lambda _event: add_selected())
+        listbox.bind("<Double-Button-1>", lambda _event: amount_entry.focus_set())
         buttons = ttk.Frame(panel)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Add to schedule", command=add_selected).pack(side="left")
+        ttk.Button(
+            buttons, text="STEP 3 — Add to schedule", command=add_selected
+        ).pack(side="left")
         ttk.Button(
             buttons, text="Add custom...", command=lambda: (window.destroy(), self.new_supplement())
         ).pack(side="left", padx=8)
-        ttk.Button(buttons, text="Cancel", command=window.destroy).pack(side="right")
+        ttk.Button(buttons, text="Done / Close", command=window.destroy).pack(side="right")
+        ttk.Label(panel, textvariable=status, wraplength=540).pack(anchor="w", pady=(10, 0))
         entry.focus_set()
 
     def new_supplement(self) -> None:
