@@ -244,14 +244,14 @@ class SupplementBaristaApp:
     def browse_library(self) -> None:
         window = tk.Toplevel(self.root)
         window.title("Supplement library — select or add custom")
-        window.geometry("520x490")
+        window.geometry("560x610")
         window.transient(self.root)
         window.grab_set()
         panel = ttk.Frame(window, padding=12)
         panel.pack(fill="both", expand=True)
         ttk.Label(
             panel,
-            text="Choose a supplement to add to your catalog. No doses are scheduled.",
+            text="Choose a supplement, enter dosage and time, then add to schedule.",
         ).pack(anchor="w")
         search = tk.StringVar()
         ttk.Label(panel, text="Search library").pack(anchor="w", pady=(12, 0))
@@ -259,6 +259,24 @@ class SupplementBaristaApp:
         entry.pack(fill="x")
         listbox = tk.Listbox(panel, height=17, exportselection=False)
         listbox.pack(fill="both", expand=True, pady=10)
+        dose_fields = ttk.LabelFrame(panel, text="Schedule dose", padding=8)
+        dose_fields.pack(fill="x", pady=(0, 10))
+        ttk.Label(dose_fields, text="Time").grid(row=0, column=0, sticky="w")
+        time_choice = tk.StringVar(value=self.time_var.get())
+        ttk.Combobox(
+            dose_fields, textvariable=time_choice, state="readonly", width=8,
+            values=[f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)],
+        ).grid(row=1, column=0, padx=(0, 12))
+        ttk.Label(dose_fields, text="Quantity").grid(row=0, column=1, sticky="w")
+        amount_choice = tk.StringVar(value="")
+        ttk.Entry(dose_fields, textvariable=amount_choice, width=12).grid(
+            row=1, column=1, padx=(0, 12)
+        )
+        ttk.Label(dose_fields, text="Unit (mg, g, capsule)").grid(
+            row=0, column=2, sticky="w"
+        )
+        unit_choice = tk.StringVar(value="")
+        ttk.Entry(dose_fields, textvariable=unit_choice, width=18).grid(row=1, column=2)
         entries: list[tuple[str, str]] = []
 
         def refresh(*_args) -> None:
@@ -275,27 +293,38 @@ class SupplementBaristaApp:
                 )
                 return
             name, form = entries[selection[0]]
-            existing = next(
-                (item for item in self.store.supplements()
-                 if item["name"].casefold() == name.casefold()),
-                None,
-            )
-            if existing:
-                self.refresh_catalog()
-                self.supplement_var.set(existing["name"])
-                messagebox.showinfo(
-                    "Already in catalog", "Selected the existing catalog entry.",
-                    parent=window,
+            try:
+                profile_id = self._profile_id()
+                quantity = float(amount_choice.get())
+                unit = unit_choice.get().strip()
+                import math
+                if not math.isfinite(quantity) or quantity <= 0 or not unit:
+                    raise ValueError("Enter a positive quantity and a unit")
+                time = time_choice.get()
+                if time not in [
+                    f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)
+                ]:
+                    raise ValueError("Select a valid 30-minute time slot")
+                existing = next(
+                    (item for item in self.store.supplements()
+                     if item["name"].casefold() == name.casefold()),
+                    None,
                 )
-            else:
-                try:
-                    self.store.add_supplement(name, form)
-                except (ValueError, sqlite3.Error) as exc:
-                    messagebox.showerror("Supplement Barista", str(exc), parent=window)
-                    return
-                self.refresh_catalog()
-                self.supplement_var.set(name)
-                self._saved()
+                supplement_id = (
+                    existing["id"] if existing
+                    else self.store.add_supplement(name, form)
+                )
+                self.store.add_dose(profile_id, supplement_id, time, quantity, unit)
+            except (ValueError, LookupError, sqlite3.Error) as exc:
+                messagebox.showerror("Supplement Barista", str(exc), parent=window)
+                return
+            self.refresh_catalog()
+            self.supplement_var.set(name if not existing else existing["name"])
+            self.time_var.set(time)
+            self.quantity_var.set(str(quantity))
+            self.unit_var.set(unit)
+            self.refresh_schedule()
+            self._saved()
             window.destroy()
 
         search.trace_add("write", refresh)
@@ -303,7 +332,7 @@ class SupplementBaristaApp:
         listbox.bind("<Double-Button-1>", lambda _event: add_selected())
         buttons = ttk.Frame(panel)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Add selected", command=add_selected).pack(side="left")
+        ttk.Button(buttons, text="Add to schedule", command=add_selected).pack(side="left")
         ttk.Button(
             buttons, text="Add custom...", command=lambda: (window.destroy(), self.new_supplement())
         ).pack(side="left", padx=8)
