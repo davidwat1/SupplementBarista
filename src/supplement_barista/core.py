@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import math
+import sqlite3
 from pathlib import Path
 
 
