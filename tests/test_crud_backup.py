@@ -52,3 +52,25 @@ def test_foreign_keys_enforced():
     with pytest.raises(sqlite3.IntegrityError):
         store.add_dose(999, 999, "08:00", 1, "tablet")
     store.close()
+
+
+def test_backup_can_replace_existing_file_when_explicit(tmp_path):
+    store = SupplementStore(tmp_path / "live.sqlite3")
+    store.add_profile("Before")
+    destination = tmp_path / "saved.sqlite3"
+    store.backup(destination)
+    store.add_profile("After")
+    store.backup(destination, overwrite=True)
+    with sqlite3.connect(destination) as db:
+        names = [row[0] for row in db.execute("SELECT name FROM profiles ORDER BY name")]
+        assert names == ["After", "Before"]
+        assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    store.close()
+
+
+def test_backup_refuses_to_overwrite_active_database(tmp_path):
+    path = tmp_path / "live.sqlite3"
+    store = SupplementStore(path)
+    with pytest.raises(ValueError, match="active database"):
+        store.backup(path, overwrite=True)
+    store.close()
