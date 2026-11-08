@@ -40,3 +40,21 @@ def test_supplement_form_normalizes_on_edit():
     store.update_supplement(item, "Vitamin C", "pow")
     assert store.supplements()[0]["form"] == "powder"
     store.close()
+
+
+def test_legacy_labels_normalize_on_reopen(tmp_path):
+    path = tmp_path / "legacy.sqlite3"
+    store = SupplementStore(path)
+    profile = store.add_profile("Person")
+    item = store.add_supplement("Vitamin C", "capsule")
+    dose = store.add_dose(profile, item, "08:00", 2, "capsule")
+    with store.connection:
+        store.connection.execute("UPDATE supplements SET form = 'cap' WHERE id = ?", (item,))
+        store.connection.execute("UPDATE doses SET unit = 'cap' WHERE id = ?", (dose,))
+    store.close()
+
+    reopened = SupplementStore(path)
+    assert reopened.supplements()[0]["form"] == "capsule"
+    assert reopened.schedule(profile)[0]["unit"] == "capsule"
+    assert reopened.schedule(profile)[0]["quantity"] == 2
+    reopened.close()
