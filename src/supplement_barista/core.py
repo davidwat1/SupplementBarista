@@ -40,6 +40,22 @@ class SupplementStore:
         """)
         self.connection.execute("PRAGMA user_version = 1")
         self.connection.commit()
+        self._normalize_legacy_labels()
+
+    def _normalize_legacy_labels(self) -> None:
+        """Standardize recognized historic aliases without changing dose amounts."""
+        with self.connection:
+            for table, column in (("supplements", "form"), ("doses", "unit")):
+                rows = self.connection.execute(
+                    f"SELECT id, {column} FROM {table}"
+                ).fetchall()
+                for row in rows:
+                    normalized = normalize_unit(row[column])
+                    if normalized != row[column]:
+                        self.connection.execute(
+                            f"UPDATE {table} SET {column} = ? WHERE id = ?",
+                            (normalized, row["id"]),
+                        )
 
     def add_profile(self, name: str) -> int:
         if not name.strip():
