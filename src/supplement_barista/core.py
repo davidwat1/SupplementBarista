@@ -174,6 +174,11 @@ class SupplementStore:
         """
         source_path = Path(source).resolve(strict=True)
         recovery_path = Path(recovery_backup).resolve()
+        active_path = self.connection.execute("PRAGMA database_list").fetchone()[2]
+        if active_path and source_path == Path(active_path).resolve():
+            raise ValueError("Restore source cannot be the active database")
+        if active_path and recovery_path == Path(active_path).resolve():
+            raise ValueError("Recovery backup cannot overwrite the active database")
         if source_path == recovery_path:
             raise ValueError("Recovery backup must differ from restore source")
         if recovery_path.exists():
