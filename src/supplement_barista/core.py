@@ -6,6 +6,7 @@ import math
 import sqlite3
 import os
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 
@@ -175,7 +176,7 @@ class SupplementStore:
                 dir=target.parent, delete=False,
             ) as temp_file:
                 temp_path = Path(temp_file.name)
-            with sqlite3.connect(str(temp_path)) as backup_connection:
+            with closing(sqlite3.connect(str(temp_path))) as backup_connection:
                 self.connection.backup(backup_connection)
                 if backup_connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ValueError("New backup failed SQLite integrity check")
