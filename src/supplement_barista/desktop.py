@@ -1,0 +1,300 @@
+"""Desktop application for the Supplement Barista scheduling foundation."""
+
+from __future__ import annotations
+
+import sqlite3
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, simpledialog, ttk
+
+from supplement_barista.core import SupplementStore
+
+
+def default_database_path() -> Path:
+    location = Path.home() / "SupplementBarista"
+    location.mkdir(parents=True, exist_ok=True)
+    return location / "supplements.sqlite3"
+
+
+class SupplementBaristaApp:
+    def __init__(self, root: tk.Tk, store: SupplementStore) -> None:
+        self.root = root
+        self.store = store
+        self.root.title("Supplement Barista v2")
+        self.root.geometry("1050x650")
+        self.profile_ids: dict[str, int] = {}
+        self.supplement_ids: dict[str, int] = {}
+        self.profile_var = tk.StringVar()
+        self.supplement_var = tk.StringVar()
+        self.time_var = tk.StringVar(value="08:00")
+        self.quantity_var = tk.StringVar(value="1")
+        self.unit_var = tk.StringVar(value="capsule")
+        self._build()
+        self.refresh_catalog()
+        self.refresh_profiles()
+
+    def _build(self) -> None:
+        frame = ttk.Frame(self.root, padding=14)
+        frame.pack(fill="both", expand=True)
+        profile = ttk.LabelFrame(frame, text="Profile", padding=10)
+        profile.pack(fill="x")
+        ttk.Label(profile, text="Active profile").pack(side="left")
+        self.profile_box = ttk.Combobox(
+            profile, textvariable=self.profile_var, state="readonly", width=30
+        )
+        self.profile_box.pack(side="left", padx=8)
+        self.profile_box.bind("<<ComboboxSelected>>", lambda _event: self.refresh_schedule())
+        ttk.Button(profile, text="New profile", command=self.new_profile).pack(side="left")
+        ttk.Button(profile, text="Rename", command=self.rename_profile).pack(side="left")
+        ttk.Button(profile, text="Delete", command=self.delete_profile).pack(side="left")
+
+        catalog = ttk.LabelFrame(frame, text="Supplement catalog", padding=10)
+        catalog.pack(fill="x", pady=10)
+        ttk.Label(catalog, text="Supplement").pack(side="left")
+        self.supplement_box = ttk.Combobox(
+            catalog, textvariable=self.supplement_var, state="readonly", width=35
+        )
+        self.supplement_box.pack(side="left", padx=8)
+        ttk.Button(catalog, text="Add", command=self.new_supplement).pack(side="left")
+        ttk.Button(catalog, text="Edit", command=self.edit_supplement).pack(side="left")
+        ttk.Button(catalog, text="Delete", command=self.delete_supplement).pack(side="left")
+
+        dose = ttk.LabelFrame(frame, text="Daily dose", padding=10)
+        dose.pack(fill="x")
+        ttk.Label(dose, text="Time").pack(side="left")
+        self.time_box = ttk.Combobox(
+            dose,
+            textvariable=self.time_var,
+            values=[f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 30)],
+            state="readonly",
+            width=8,
+        )
+        self.time_box.pack(side="left", padx=5)
+        ttk.Label(dose, text="Quantity").pack(side="left")
+        ttk.Entry(dose, textvariable=self.quantity_var, width=8).pack(side="left", padx=5)
+        ttk.Label(dose, text="Unit").pack(side="left")
+        ttk.Entry(dose, textvariable=self.unit_var, width=15).pack(side="left", padx=5)
+        ttk.Button(dose, text="Add dose", command=self.add_dose).pack(side="left", padx=4)
+        ttk.Button(dose, text="Update selected", command=self.update_dose).pack(side="left")
+        ttk.Button(dose, text="Delete selected", command=self.delete_dose).pack(side="left")
+
+        schedule = ttk.LabelFrame(frame, text="Daily schedule", padding=10)
+        schedule.pack(fill="both", expand=True, pady=10)
+        columns = ("time", "supplement", "form", "quantity", "unit")
+        self.table = ttk.Treeview(schedule, columns=columns, show="headings", selectmode="browse")
+        for column in columns:
+            self.table.heading(column, text=column.title())
+            self.table.column(column, width=130 if column != "supplement" else 320)
+        self.table.pack(side="left", fill="both", expand=True)
+        self.table.bind("<<TreeviewSelect>>", self.select_dose)
+        scrollbar = ttk.Scrollbar(schedule, orient="vertical", command=self.table.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.table.configure(yscrollcommand=scrollbar.set)
+        ttk.Button(frame, text="Back up database", command=self.backup).pack(anchor="e")
+
+    def _execute(self, action) -> None:
+        try:
+            action()
+        except (ValueError, LookupError, sqlite3.Error, OSError) as exc:
+            messagebox.showerror("Supplement Barista", str(exc), parent=self.root)
+
+    def _profile_id(self) -> int:
+        if self.profile_var.get() not in self.profile_ids:
+            raise ValueError("Select or create a profile first")
+        return self.profile_ids[self.profile_var.get()]
+
+    def _supplement_id(self) -> int:
+        if self.supplement_var.get() not in self.supplement_ids:
+            raise ValueError("Select or create a supplement first")
+        return self.supplement_ids[self.supplement_var.get()]
+
+    def _selected_dose_id(self) -> int:
+        selection = self.table.selection()
+        if not selection:
+            raise ValueError("Select a schedule row first")
+        return int(selection[0])
+
+    def refresh_profiles(self) -> None:
+        previous = self.profile_var.get()
+        self.profile_ids = {row["name"]: row["id"] for row in self.store.profiles()}
+        self.profile_box["values"] = list(self.profile_ids)
+        self.profile_var.set(
+            previous if previous in self.profile_ids else next(iter(self.profile_ids), "")
+        )
+        self.refresh_schedule()
+
+    def refresh_catalog(self) -> None:
+        previous = self.supplement_var.get()
+        self.supplement_ids = {
+            row["name"]: row["id"] for row in self.store.supplements()
+        }
+        self.supplement_box["values"] = list(self.supplement_ids)
+        self.supplement_var.set(
+            previous if previous in self.supplement_ids else next(iter(self.supplement_ids), "")
+        )
+
+    def refresh_schedule(self) -> None:
+        for item in self.table.get_children():
+            self.table.delete(item)
+        if self.profile_var.get() not in self.profile_ids:
+            return
+        for row in self.store.schedule(self._profile_id()):
+            self.table.insert(
+                "", "end", iid=str(row["id"]),
+                values=(
+                    row["time"], row["supplement"], row["form"],
+                    row["quantity"], row["unit"],
+                ),
+            )
+
+    def new_profile(self) -> None:
+        name = simpledialog.askstring("New profile", "Profile name:", parent=self.root)
+        if name is not None:
+            self._execute(lambda: self._create_profile(name))
+
+    def _create_profile(self, name: str) -> None:
+        self.store.add_profile(name)
+        self.refresh_profiles()
+        self.profile_var.set(name.strip())
+        self.refresh_schedule()
+
+    def rename_profile(self) -> None:
+        def action() -> None:
+            profile_id = self._profile_id()
+            name = simpledialog.askstring(
+                "Rename profile", "New name:", initialvalue=self.profile_var.get(),
+                parent=self.root,
+            )
+            if name is not None:
+                self.store.rename_profile(profile_id, name)
+                self.refresh_profiles()
+                self.profile_var.set(name.strip())
+                self.refresh_schedule()
+        self._execute(action)
+
+    def delete_profile(self) -> None:
+        def action() -> None:
+            profile_id = self._profile_id()
+            if messagebox.askyesno(
+                "Delete profile", "Delete this profile and all its scheduled doses?",
+                parent=self.root,
+            ):
+                self.store.delete_profile(profile_id)
+                self.refresh_profiles()
+        self._execute(action)
+
+    def _supplement_dialog(self, title: str, current: dict | None = None) -> None:
+        name = simpledialog.askstring(
+            title, "Supplement name:",
+            initialvalue=current["name"] if current else "", parent=self.root,
+        )
+        if name is None:
+            return
+        form = simpledialog.askstring(
+            title, "Form (capsule, powder, liquid, etc.):",
+            initialvalue=current["form"] if current else "Capsule", parent=self.root,
+        )
+        if form is None:
+            return
+        notes = simpledialog.askstring(
+            title, "Personal notes:",
+            initialvalue=current["notes"] if current else "", parent=self.root,
+        )
+        if notes is None:
+            return
+        if current:
+            self.store.update_supplement(current["id"], name, form, notes)
+        else:
+            self.store.add_supplement(name, form, notes)
+        self.refresh_catalog()
+        self.supplement_var.set(name.strip())
+        self.refresh_schedule()
+
+    def new_supplement(self) -> None:
+        self._execute(lambda: self._supplement_dialog("Add supplement"))
+
+    def edit_supplement(self) -> None:
+        def action() -> None:
+            selected_id = self._supplement_id()
+            current = next(
+                row for row in self.store.supplements() if row["id"] == selected_id
+            )
+            self._supplement_dialog("Edit supplement", current)
+        self._execute(action)
+
+    def delete_supplement(self) -> None:
+        def action() -> None:
+            supplement_id = self._supplement_id()
+            if messagebox.askyesno(
+                "Delete supplement", "Delete supplement and all scheduled doses?",
+                parent=self.root,
+            ):
+                self.store.delete_supplement(supplement_id)
+                self.refresh_catalog()
+                self.refresh_schedule()
+        self._execute(action)
+
+    def _dose_values(self) -> tuple[str, float, str]:
+        return self.time_var.get(), float(self.quantity_var.get()), self.unit_var.get()
+
+    def add_dose(self) -> None:
+        def action() -> None:
+            time, quantity, unit = self._dose_values()
+            self.store.add_dose(
+                self._profile_id(), self._supplement_id(), time, quantity, unit
+            )
+            self.refresh_schedule()
+        self._execute(action)
+
+    def update_dose(self) -> None:
+        def action() -> None:
+            dose_id = self._selected_dose_id()
+            time, quantity, unit = self._dose_values()
+            self.store.update_dose(dose_id, time, quantity, unit)
+            self.refresh_schedule()
+        self._execute(action)
+
+    def delete_dose(self) -> None:
+        def action() -> None:
+            dose_id = self._selected_dose_id()
+            if messagebox.askyesno(
+                "Delete dose", "Delete this scheduled dose?", parent=self.root
+            ):
+                self.store.delete_dose(dose_id)
+                self.refresh_schedule()
+        self._execute(action)
+
+    def select_dose(self, _event) -> None:
+        selection = self.table.selection()
+        if selection:
+            values = self.table.item(selection[0], "values")
+            self.time_var.set(values[0])
+            self.supplement_var.set(values[1])
+            self.quantity_var.set(str(values[3]))
+            self.unit_var.set(values[4])
+
+    def backup(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self.root, title="Save backup", defaultextension=".sqlite3",
+            filetypes=[("SQLite database", "*.sqlite3")],
+        )
+        if path:
+            self._execute(lambda: self._save_backup(path))
+
+    def _save_backup(self, path: str) -> None:
+        self.store.backup(path)
+        messagebox.showinfo("Backup", "Database backup saved.", parent=self.root)
+
+
+def main() -> None:
+    root = tk.Tk()
+    store = SupplementStore(default_database_path())
+    SupplementBaristaApp(root, store)
+    try:
+        root.mainloop()
+    finally:
+        store.close()
+
+
+if __name__ == "__main__":
+    main()
