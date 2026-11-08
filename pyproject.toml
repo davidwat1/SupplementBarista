@@ -19,3 +19,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[project.scripts]
+supplement-barista = "supplement_barista.desktop:main"
