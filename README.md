@@ -19,3 +19,7 @@ py -m venv .venv
 ```
 
 The database is stored under your home directory in `SupplementBarista/supplements.sqlite3`. The desktop UI supports profile, supplement, and schedule management, plus manual backup. The initial GUI has not yet undergone an interactive Windows acceptance test.
+
+## CSV schedule exchange
+
+The desktop app can export a selected profile's schedule to CSV and import CSV into a selected profile. Columns are `time,supplement,form,quantity,unit`. Times must use 30-minute increments. Import validates rows before writing and rolls back on database errors. Imports append doses and may create duplicates on repeat import. Export and database backup refuse to overwrite existing files. Restore is not yet available in the UI; preserve the original database before any manual recovery.
