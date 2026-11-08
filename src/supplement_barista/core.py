@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import math
 from pathlib import Path
 
 
@@ -32,6 +33,7 @@ class SupplementStore:
                 CHECK(length(time) = 5 AND time GLOB '[0-2][0-9]:[0-5][0-9]')
             );
         """)
+        self.connection.execute("PRAGMA user_version = 1")
         self.connection.commit()
 
     def add_profile(self, name: str) -> int:
@@ -62,7 +64,7 @@ class SupplementStore:
             raise ValueError("Time must be HH:MM") from exc
         if parsed.strftime("%H:%M") != time or parsed.minute % 30 != 0:
             raise ValueError("Time must be HH:MM on a 30-minute increment")
-        if quantity <= 0 or not unit.strip():
+        if not math.isfinite(quantity) or quantity <= 0 or not unit.strip():
             raise ValueError("Positive quantity and unit are required")
         with self.connection:
             cursor = self.connection.execute(
@@ -80,6 +82,90 @@ class SupplementStore:
             (profile_id,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def profiles(self) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT id, name FROM profiles ORDER BY name, id"
+        )]
+
+    def supplements(self) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT id, name, form, notes FROM supplements ORDER BY name, id"
+        )]
+
+    def rename_profile(self, profile_id: int, name: str) -> None:
+        if not name.strip():
+            raise ValueError("Profile name is required")
+        with self.connection:
+            cursor = self.connection.execute(
+                "UPDATE profiles SET name = ? WHERE id = ?", (name.strip(), profile_id)
+            )
+        if cursor.rowcount == 0:
+            raise LookupError("Profile not found")
+
+    def update_supplement(
+        self, supplement_id: int, name: str, form: str, notes: str = ""
+    ) -> None:
+        if not name.strip() or not form.strip():
+            raise ValueError("Supplement name and form are required")
+        with self.connection:
+            cursor = self.connection.execute(
+                "UPDATE supplements SET name = ?, form = ?, notes = ? WHERE id = ?",
+                (name.strip(), form.strip(), notes, supplement_id),
+            )
+        if cursor.rowcount == 0:
+            raise LookupError("Supplement not found")
+
+    def update_dose(self, dose_id: int, time: str, quantity: float, unit: str) -> None:
+        from datetime import time as clock_time
+
+        try:
+            parsed = clock_time.fromisoformat(time)
+        except ValueError as exc:
+            raise ValueError("Time must be HH:MM") from exc
+        if parsed.strftime("%H:%M") != time or parsed.minute % 30 != 0:
+            raise ValueError("Time must be HH:MM on a 30-minute increment")
+        if not math.isfinite(quantity) or quantity <= 0 or not unit.strip():
+            raise ValueError("Positive finite quantity and unit are required")
+        with self.connection:
+            cursor = self.connection.execute(
+                "UPDATE doses SET time = ?, quantity = ?, unit = ? WHERE id = ?",
+                (time, quantity, unit.strip(), dose_id),
+            )
+        if cursor.rowcount == 0:
+            raise LookupError("Dose not found")
+
+    def delete_dose(self, dose_id: int) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM doses WHERE id = ?", (dose_id,))
+
+    def delete_profile(self, profile_id: int) -> None:
+        with self.connection:
+            self.connection.execute("DELETE FROM doses WHERE profile_id = ?", (profile_id,))
+            self.connection.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
+
+    def delete_supplement(self, supplement_id: int) -> None:
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM doses WHERE supplement_id = ?", (supplement_id,)
+            )
+            self.connection.execute(
+                "DELETE FROM supplements WHERE id = ?", (supplement_id,)
+            )
+
+    def backup(self, destination: str | Path) -> None:
+        target = Path(destination)
+        if str(target) == ":memory:":
+            raise ValueError("Backup destination must be a file")
+        if target.exists():
+            raise FileExistsError("Refusing to overwrite existing backup")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with sqlite3.connect(str(target)) as backup_connection:
+                self.connection.backup(backup_connection)
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
 
     def close(self) -> None:
         self.connection.close()
