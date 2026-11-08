@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 import sqlite3
+import os
+import tempfile
 from pathlib import Path
 
 
@@ -153,19 +155,36 @@ class SupplementStore:
                 "DELETE FROM supplements WHERE id = ?", (supplement_id,)
             )
 
-    def backup(self, destination: str | Path) -> None:
+    def backup(self, destination: str | Path, *, overwrite: bool = False) -> None:
         target = Path(destination)
         if str(target) == ":memory:":
             raise ValueError("Backup destination must be a file")
-        if target.exists():
+        target = target.resolve()
+        active_path = self.connection.execute("PRAGMA database_list").fetchone()[2]
+        if active_path and target == Path(active_path).resolve():
+            raise ValueError("Backup destination cannot be the active database")
+        if target.exists() and not overwrite:
             raise FileExistsError("Refusing to overwrite existing backup")
+        if target.exists() and not target.is_file():
+            raise ValueError("Backup destination must be a file")
         target.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = None
         try:
-            with sqlite3.connect(str(target)) as backup_connection:
+            with tempfile.NamedTemporaryFile(
+                prefix=".supplement-barista-", suffix=".sqlite3",
+                dir=target.parent, delete=False,
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+            with sqlite3.connect(str(temp_path)) as backup_connection:
                 self.connection.backup(backup_connection)
-        except Exception:
-            target.unlink(missing_ok=True)
-            raise
+                if backup_connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise ValueError("New backup failed SQLite integrity check")
+            if target.exists() and not overwrite:
+                raise FileExistsError("Refusing to overwrite existing backup")
+            os.replace(temp_path, target)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
     def restore(self, source: str | Path, recovery_backup: str | Path) -> None:
         """Restore a validated SQLite backup after saving the current database.
