@@ -54,7 +54,7 @@ class SupplementStore:
         with self.connection:
             cursor = self.connection.execute(
                 "INSERT INTO supplements(name, form, notes) VALUES (?, ?, ?)",
-                (name.strip(), form.strip(), notes),
+                (name.strip(), normalize_unit(form), notes),
             )
         return int(cursor.lastrowid)
 
@@ -116,7 +116,7 @@ class SupplementStore:
         with self.connection:
             cursor = self.connection.execute(
                 "UPDATE supplements SET name = ?, form = ?, notes = ? WHERE id = ?",
-                (name.strip(), form.strip(), notes, supplement_id),
+                (name.strip(), normalize_unit(form), notes, supplement_id),
             )
         if cursor.rowcount == 0:
             raise LookupError("Supplement not found")
