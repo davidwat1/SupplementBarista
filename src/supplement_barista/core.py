@@ -167,5 +167,49 @@ class SupplementStore:
             target.unlink(missing_ok=True)
             raise
 
+    def restore(self, source: str | Path, recovery_backup: str | Path) -> None:
+        """Restore a validated SQLite backup after saving the current database.
+
+        Recovery backup must be a new file, never an existing database.
+        """
+        source_path = Path(source).resolve(strict=True)
+        recovery_path = Path(recovery_backup).resolve()
+        if source_path == recovery_path:
+            raise ValueError("Recovery backup must differ from restore source")
+        if recovery_path.exists():
+            raise FileExistsError("Recovery backup already exists")
+        if source_path.stat().st_size == 0:
+            raise ValueError("Restore source is empty")
+
+        with sqlite3.connect(f"file:{source_path.as_posix()}?mode=ro", uri=True) as incoming:
+            integrity = incoming.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise ValueError("Restore source failed SQLite integrity check")
+            version = incoming.execute("PRAGMA user_version").fetchone()[0]
+            if version != 1:
+                raise ValueError(f"Unsupported database schema version: {version}")
+            required = {"profiles", "supplements", "doses"}
+            tables = {
+                row[0] for row in incoming.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if not required.issubset(tables):
+                raise ValueError("Restore source is not a Supplement Barista database")
+            for table in required:
+                incoming.execute(f"SELECT * FROM {table} LIMIT 1").fetchall()
+            # Save the current database before replacing it.
+            self.backup(recovery_path)
+            try:
+                incoming.backup(self.connection)
+                self.connection.execute("PRAGMA foreign_keys = ON")
+                integrity = self.connection.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise ValueError("Restored database failed integrity check")
+            except Exception:
+                with sqlite3.connect(str(recovery_path)) as recovery:
+                    recovery.backup(self.connection)
+                raise
+
     def close(self) -> None:
         self.connection.close()
