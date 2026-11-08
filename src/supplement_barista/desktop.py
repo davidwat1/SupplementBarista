@@ -416,7 +416,7 @@ class SupplementBaristaApp:
                 return
             self.supplement_var.set(values[1])
             self.quantity_var.set(str(values[3]))
-            self.unit_var.set(values[4])
+            self.unit_var.set(normalize_unit(values[4]))
 
     def import_csv(self) -> None:
         def action() -> None:
