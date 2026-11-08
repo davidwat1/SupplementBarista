@@ -50,6 +50,8 @@ class SupplementStore:
                     f"SELECT id, {column} FROM {table}"
                 ).fetchall()
                 for row in rows:
+                    if not row[column].strip():
+                        continue
                     normalized = normalize_unit(row[column])
                     if normalized != row[column]:
                         self.connection.execute(
