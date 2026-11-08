@@ -8,6 +8,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from supplement_barista.core import SupplementStore
+from supplement_barista.csv_io import export_schedule, import_schedule
 
 
 def default_database_path() -> Path:
@@ -90,7 +91,11 @@ class SupplementBaristaApp:
         scrollbar = ttk.Scrollbar(schedule, orient="vertical", command=self.table.yview)
         scrollbar.pack(side="right", fill="y")
         self.table.configure(yscrollcommand=scrollbar.set)
-        ttk.Button(frame, text="Back up database", command=self.backup).pack(anchor="e")
+        actions = ttk.Frame(frame)
+        actions.pack(fill="x")
+        ttk.Button(actions, text="Import schedule CSV", command=self.import_csv).pack(side="left")
+        ttk.Button(actions, text="Export schedule CSV", command=self.export_csv).pack(side="left")
+        ttk.Button(actions, text="Back up database", command=self.backup).pack(side="right")
 
     def _execute(self, action) -> None:
         try:
@@ -272,6 +277,40 @@ class SupplementBaristaApp:
             self.supplement_var.set(values[1])
             self.quantity_var.set(str(values[3]))
             self.unit_var.set(values[4])
+
+    def import_csv(self) -> None:
+        def action() -> None:
+            profile_id = self._profile_id()
+            path = filedialog.askopenfilename(
+                parent=self.root, title="Import schedule CSV",
+                filetypes=[("CSV files", "*.csv")],
+            )
+            if not path:
+                return
+            if not messagebox.askyesno(
+                "Import schedule",
+                "Import adds doses to this profile; importing twice creates duplicates. Continue?",
+                parent=self.root,
+            ):
+                return
+            count = import_schedule(self.store, profile_id, path)
+            self.refresh_catalog()
+            self.refresh_schedule()
+            messagebox.showinfo("Import complete", f"Imported {count} doses.", parent=self.root)
+        self._execute(action)
+
+    def export_csv(self) -> None:
+        def action() -> None:
+            profile_id = self._profile_id()
+            path = filedialog.asksaveasfilename(
+                parent=self.root, title="Export schedule CSV",
+                defaultextension=".csv", filetypes=[("CSV files", "*.csv")],
+            )
+            if not path:
+                return
+            count = export_schedule(self.store, profile_id, path)
+            messagebox.showinfo("Export complete", f"Exported {count} doses.", parent=self.root)
+        self._execute(action)
 
     def backup(self) -> None:
         path = filedialog.asksaveasfilename(
