@@ -88,6 +88,7 @@ class SupplementBaristaApp:
         for column in columns:
             self.table.heading(column, text=column.title())
             self.table.column(column, width=130 if column != "supplement" else 320)
+        self.table.tag_configure("empty", foreground="#888888")
         self.table.pack(side="left", fill="both", expand=True)
         self.table.bind("<<TreeviewSelect>>", self.select_dose)
         scrollbar = ttk.Scrollbar(schedule, orient="vertical", command=self.table.yview)
@@ -121,6 +122,8 @@ class SupplementBaristaApp:
         selection = self.table.selection()
         if not selection:
             raise ValueError("Select a schedule row first")
+        if selection[0].startswith("slot:"):
+            raise ValueError("Select a scheduled dose, not an empty time slot")
         return int(selection[0])
 
     def refresh_profiles(self) -> None:
@@ -147,14 +150,27 @@ class SupplementBaristaApp:
             self.table.delete(item)
         if self.profile_var.get() not in self.profile_ids:
             return
-        for row in self.store.schedule(self._profile_id()):
-            self.table.insert(
-                "", "end", iid=str(row["id"]),
-                values=(
-                    row["time"], row["supplement"], row["form"],
-                    row["quantity"], row["unit"],
-                ),
-            )
+        schedule = self.store.schedule(self._profile_id())
+        by_time = {}
+        for row in schedule:
+            by_time.setdefault(row["time"], []).append(row)
+        for hour in range(24):
+            for minute in (0, 30):
+                slot = f"{hour:02d}:{minute:02d}"
+                rows = by_time.get(slot, [])
+                if not rows:
+                    self.table.insert(
+                        "", "end", iid=f"slot:{slot}",
+                        values=(slot, "—", "", "", ""), tags=("empty",),
+                    )
+                for row in rows:
+                    self.table.insert(
+                        "", "end", iid=str(row["id"]),
+                        values=(
+                            row["time"], row["supplement"], row["form"],
+                            row["quantity"], row["unit"],
+                        ),
+                    )
 
     def new_profile(self) -> None:
         name = simpledialog.askstring("New profile", "Profile name:", parent=self.root)
@@ -286,6 +302,8 @@ class SupplementBaristaApp:
         if selection:
             values = self.table.item(selection[0], "values")
             self.time_var.set(values[0])
+            if selection[0].startswith("slot:"):
+                return
             self.supplement_var.set(values[1])
             self.quantity_var.set(str(values[3]))
             self.unit_var.set(values[4])
