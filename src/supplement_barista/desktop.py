@@ -30,6 +30,7 @@ class SupplementBaristaApp:
         self.time_var = tk.StringVar(value="08:00")
         self.quantity_var = tk.StringVar(value="1")
         self.unit_var = tk.StringVar(value="capsule")
+        self.save_status = tk.StringVar(value="Changes save automatically")
         self._build()
         self.refresh_catalog()
         self.refresh_profiles()
@@ -95,7 +96,8 @@ class SupplementBaristaApp:
         actions.pack(fill="x")
         ttk.Button(actions, text="Import schedule CSV", command=self.import_csv).pack(side="left")
         ttk.Button(actions, text="Export schedule CSV", command=self.export_csv).pack(side="left")
-        ttk.Button(actions, text="Back up database", command=self.backup).pack(side="right")
+        ttk.Button(actions, text="Save Backup...", command=self.backup).pack(side="right")
+        ttk.Label(frame, textvariable=self.save_status).pack(anchor="w", pady=(6, 0))
 
     def _execute(self, action) -> None:
         try:
@@ -162,6 +164,7 @@ class SupplementBaristaApp:
         self.refresh_profiles()
         self.profile_var.set(name.strip())
         self.refresh_schedule()
+        self._saved()
 
     def rename_profile(self) -> None:
         def action() -> None:
@@ -175,6 +178,7 @@ class SupplementBaristaApp:
                 self.refresh_profiles()
                 self.profile_var.set(name.strip())
                 self.refresh_schedule()
+                self._saved()
         self._execute(action)
 
     def delete_profile(self) -> None:
@@ -186,6 +190,7 @@ class SupplementBaristaApp:
             ):
                 self.store.delete_profile(profile_id)
                 self.refresh_profiles()
+                self._saved()
         self._execute(action)
 
     def _supplement_dialog(self, title: str, current: dict | None = None) -> None:
@@ -214,6 +219,7 @@ class SupplementBaristaApp:
         self.refresh_catalog()
         self.supplement_var.set(name.strip())
         self.refresh_schedule()
+        self._saved()
 
     def new_supplement(self) -> None:
         self._execute(lambda: self._supplement_dialog("Add supplement"))
@@ -237,6 +243,7 @@ class SupplementBaristaApp:
                 self.store.delete_supplement(supplement_id)
                 self.refresh_catalog()
                 self.refresh_schedule()
+                self._saved()
         self._execute(action)
 
     def _dose_values(self) -> tuple[str, float, str]:
@@ -249,6 +256,7 @@ class SupplementBaristaApp:
                 self._profile_id(), self._supplement_id(), time, quantity, unit
             )
             self.refresh_schedule()
+            self._saved()
         self._execute(action)
 
     def update_dose(self) -> None:
@@ -257,6 +265,7 @@ class SupplementBaristaApp:
             time, quantity, unit = self._dose_values()
             self.store.update_dose(dose_id, time, quantity, unit)
             self.refresh_schedule()
+            self._saved()
         self._execute(action)
 
     def delete_dose(self) -> None:
@@ -267,6 +276,7 @@ class SupplementBaristaApp:
             ):
                 self.store.delete_dose(dose_id)
                 self.refresh_schedule()
+                self._saved()
         self._execute(action)
 
     def select_dose(self, _event) -> None:
@@ -296,6 +306,7 @@ class SupplementBaristaApp:
             count = import_schedule(self.store, profile_id, path)
             self.refresh_catalog()
             self.refresh_schedule()
+            self._saved()
             messagebox.showinfo("Import complete", f"Imported {count} doses.", parent=self.root)
         self._execute(action)
 
@@ -311,6 +322,9 @@ class SupplementBaristaApp:
             count = export_schedule(self.store, profile_id, path)
             messagebox.showinfo("Export complete", f"Exported {count} doses.", parent=self.root)
         self._execute(action)
+
+    def _saved(self) -> None:
+        self.save_status.set("All changes saved automatically")
 
     def backup(self) -> None:
         path = filedialog.asksaveasfilename(
