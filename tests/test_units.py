@@ -31,3 +31,12 @@ def test_store_normalizes_added_and_updated_doses():
     store.update_dose(dose, "08:30", 1, "pow")
     assert store.schedule(profile)[0]["unit"] == "powder"
     store.close()
+
+
+def test_supplement_form_normalizes_on_edit():
+    store = SupplementStore()
+    item = store.add_supplement("Vitamin C", "cap")
+    assert store.supplements()[0]["form"] == "capsule"
+    store.update_supplement(item, "Vitamin C", "pow")
+    assert store.supplements()[0]["form"] == "powder"
+    store.close()
