@@ -497,7 +497,15 @@ class SupplementBaristaApp:
             self._execute(lambda: self._save_backup(path))
 
     def _save_backup(self, path: str) -> None:
-        self.store.backup(path)
+        overwrite = Path(path).exists()
+        if overwrite and not messagebox.askyesno(
+            "Replace existing backup?",
+            "This will replace the selected backup with the current database. "
+            "The previous backup will no longer be available. Continue?",
+            parent=self.root,
+        ):
+            return
+        self.store.backup(path, overwrite=overwrite)
         messagebox.showinfo("Backup", "Database backup saved.", parent=self.root)
 
 
