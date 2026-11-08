@@ -9,6 +9,8 @@ import tempfile
 from contextlib import closing
 from pathlib import Path
 
+from supplement_barista.units import normalize_unit
+
 
 class SupplementStore:
     def __init__(self, path: str | Path = ":memory:") -> None:
@@ -73,7 +75,7 @@ class SupplementStore:
             cursor = self.connection.execute(
                 "INSERT INTO doses(profile_id, supplement_id, time, quantity, unit) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (profile_id, supplement_id, time, quantity, unit.strip()),
+                (profile_id, supplement_id, time, quantity, normalize_unit(unit)),
             )
         return int(cursor.lastrowid)
 
@@ -133,7 +135,7 @@ class SupplementStore:
         with self.connection:
             cursor = self.connection.execute(
                 "UPDATE doses SET time = ?, quantity = ?, unit = ? WHERE id = ?",
-                (time, quantity, unit.strip(), dose_id),
+                (time, quantity, normalize_unit(unit), dose_id),
             )
         if cursor.rowcount == 0:
             raise LookupError("Dose not found")
