@@ -13,6 +13,8 @@ from supplement_barista.csv_io import export_schedule, import_schedule
 from supplement_barista.library import search_supplements
 from supplement_barista.units import normalize_unit
 
+COMMON_UNITS = ("capsule", "tablet", "softgel", "powder", "mg", "g", "mcg", "mL", "IU", "drop", "scoop", "tsp", "tbsp")
+
 
 def default_database_path() -> Path:
     location = Path.home() / "SupplementBarista"
@@ -79,7 +81,12 @@ class SupplementBaristaApp:
         ttk.Label(dose, text="Quantity").pack(side="left")
         ttk.Entry(dose, textvariable=self.quantity_var, width=8).pack(side="left", padx=5)
         ttk.Label(dose, text="Unit").pack(side="left")
-        ttk.Entry(dose, textvariable=self.unit_var, width=15).pack(side="left", padx=5)
+        self.unit_box = ttk.Combobox(
+            dose, textvariable=self.unit_var, values=COMMON_UNITS, width=15,
+        )
+        self.unit_box.pack(side="left", padx=5)
+        self.unit_box.bind("<FocusOut>", lambda _event: self._normalize_unit_field(self.unit_var))
+        self.unit_box.bind("<<ComboboxSelected>>", lambda _event: self._normalize_unit_field(self.unit_var))
         ttk.Button(dose, text="Add dose", command=self.add_dose).pack(side="left", padx=4)
         ttk.Button(dose, text="Update selected", command=self.update_dose).pack(side="left")
         ttk.Button(dose, text="Delete selected", command=self.delete_dose).pack(side="left")
@@ -278,7 +285,17 @@ class SupplementBaristaApp:
             row=0, column=2, sticky="w"
         )
         unit_choice = tk.StringVar(value="")
-        ttk.Entry(dose_fields, textvariable=unit_choice, width=18).grid(row=1, column=2)
+        unit_box = ttk.Combobox(
+            dose_fields, textvariable=unit_choice, values=COMMON_UNITS, width=18,
+        )
+        unit_box.grid(row=1, column=2)
+        unit_box.bind(
+            "<FocusOut>", lambda _event: self._normalize_unit_field(unit_choice)
+        )
+        unit_box.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._normalize_unit_field(unit_choice),
+        )
         status = tk.StringVar(value="Select a supplement, then enter its dose and time.")
         entries: list[tuple[str, str]] = []
 
@@ -373,6 +390,11 @@ class SupplementBaristaApp:
                 self.refresh_schedule()
                 self._saved()
         self._execute(action)
+
+    @staticmethod
+    def _normalize_unit_field(variable: tk.StringVar) -> None:
+        if variable.get().strip():
+            variable.set(normalize_unit(variable.get()))
 
     def _dose_values(self) -> tuple[str, float, str]:
         return self.time_var.get(), float(self.quantity_var.get()), normalize_unit(self.unit_var.get())
