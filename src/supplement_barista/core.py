@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
-import sqlite3
 import os
+import sqlite3
 import tempfile
 from contextlib import closing
 from pathlib import Path
