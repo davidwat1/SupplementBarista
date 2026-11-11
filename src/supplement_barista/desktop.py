@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sqlite3
 import tkinter as tk
 from pathlib import Path
@@ -13,7 +14,10 @@ from supplement_barista.csv_io import export_schedule, import_schedule
 from supplement_barista.library import search_supplements
 from supplement_barista.units import normalize_unit
 
-COMMON_UNITS = ("capsule", "tablet", "softgel", "powder", "mg", "g", "mcg", "mL", "IU", "drop", "scoop", "tsp", "tbsp")
+COMMON_UNITS = (
+    "capsule", "tablet", "softgel", "powder", "mg", "g", "mcg",
+    "mL", "IU", "drop", "scoop", "tsp", "tbsp",
+)
 
 
 def default_database_path() -> Path:
@@ -317,7 +321,6 @@ class SupplementBaristaApp:
                 profile_id = self._profile_id()
                 quantity = float(amount_choice.get())
                 unit = normalize_unit(unit_choice.get())
-                import math
                 if not math.isfinite(quantity) or quantity <= 0 or not unit:
                     raise ValueError("Enter a positive quantity and a unit")
                 time = time_choice.get()
